@@ -1,5 +1,8 @@
 #include <iostream>
 #include <string>
+using namespace std; 
+
+#include <Arduino.h>
 
 #include <Arduino_JSON.h>
 
@@ -24,22 +27,28 @@ const char* ssid     = "ssid"; // 自分のSSIDに書き換える
 const char* password = "password"; // 自分のパスワードに書き換える
 const int serial_freq = 115200;
 
-WebServer server(80);
+// soil sensor
+const int sensorPinA = A0; //アナログ入力ピンの定義
+const int sensorPinD = 22;  //デジタル入力ピンの定義
+
 String coef_temperature = "0.0";
 String coef_humidity = "0.0";
 
-DHT dht(DHTPIN, DHTTYPE);
 uint32_t delayMS;
-
+WebServer server(80);
+DHT dht(DHTPIN, DHTTYPE);
 
 void setup() {
 
   Serial.begin(serial_freq);
+  
   // Initialize device.
   dht.begin();
   sensor_t sensor;
   delayMS = sensor.min_delay / 1000;
 
+  // 入力ピンの設定
+  pinMode(sensorPinD, INPUT);
 
   // シリアルコンソールのセットアップ
   delay(10);
@@ -62,7 +71,7 @@ void setup() {
   Serial.println(dht.readTemperature());
 
   // アクセスされた際に行う関数を登録する
-  server.on("/temperature", HTTP_ANY, [](){
+  server.on("/temperature/roomA", HTTP_ANY, [](){
 
     if (server.method() == HTTP_POST) { // POSTメソッドでアクセスされた場合
       coef_temperature = server.arg("plain"); // server.arg("plain")でリクエストボディが取れる。
@@ -75,7 +84,7 @@ void setup() {
     server.send(200, "text/plain", JSON.stringify(myArray)); // 値をクライアントに返す
   });
 
-  server.on("/humidity", HTTP_ANY, [](){
+  server.on("humidity/roomA", HTTP_ANY, [](){
     if (server.method() == HTTP_POST) { // POSTメソッドでアクセスされた場合
       coef_humidity = server.arg("plain"); // server.arg("plain")でリクエストボディが取れる。
     }
@@ -85,6 +94,22 @@ void setup() {
     myArray["humidity_after"] = dht.readHumidity() + coef_humidity.toFloat();
     server.send(200, "text/plain", JSON.stringify(myArray)); // 値をクライアントに返す
   });
+
+  server.on("/soil/blueberry", HTTP_ANY, [](){
+    JSONVar myArray;
+    int val_d = digitalRead(sensorPinD); //D0の値を読み取り
+    String soil = "";
+    if (val_d == HIGH) {
+      soil = "dry";
+      } else {
+      soil = "moist";
+        }
+    myArray["value"] = val_d;
+    myArray["soil"] = soil;
+    server.send(200, "text/plain", JSON.stringify(myArray)); // 値をクライアントに返す
+  });
+
+  
   // 登録されてないパスにアクセスがあった場合
   server.onNotFound([](){
     server.send(404, "text/plain", "Not Found."); // 404を返す
@@ -94,6 +119,5 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   server.handleClient();
 }
